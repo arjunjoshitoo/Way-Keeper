@@ -1,96 +1,60 @@
-import React, { useState, useCallback, useEffect } from 'react';
-
-// HELPER ICONS
-
-const MapPinIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 inline-block" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-    </svg>
-);
-
-const Spinner = () => (
-    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-);
-
-const CopyIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-    </svg>
-);
-
-const CheckIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-);
-
-// MAIN 
-
-function haversine(a, b){
+// Utilities
+function haversine(a, b) {
   const R = 6371;
-  const toRad = deg => deg * Math.PI/180;
+  const toRad = deg => deg * Math.PI / 180;
   const dlat = toRad(b.lat - a.lat);
   const dlng = toRad(b.lng - a.lng);
-  lat1 = toRad(a.lat);
-  lat2 = toRad(b.lat);
-
-  aVal = Math.sin(dlat/2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlng/2) ** 2;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const aVal = Math.sin(dlat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1 - aVal));
 }
 
-function calculateTotalDistance(path, locations){
-  let totalDistance = 0;
-  for (let i =0; i < length.path - 1; i++){
-    const from = locations[path[i]];
-    const to = locations[path[i + 1]];
-    totalDistance += haversine(from.coord, to.coord);
+function calculateTotalDistance(path, locations) {
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    total += haversine(locations[path[i]].coord, locations[path[i + 1]].coord);
   }
-  return totalDistance;
+  return total;
 }
 
-function nearestNeighbor(locations){
+function nearestNeighbor(locations) {
   const n = locations.length;
-  const unvisited = new Set(Array.from({ length: n }, (_, i) => i)); 
-  const path = [];
+  const unvisited = new Set(Array.from({ length: n }, (_, i) => i));
+  const path = [0];
+  unvisited.delete(0);
+  let current = 0;
 
-  let currentIdx = 0;
-  path.push(currentIdx);
-  unvisited.delete(currentIdx);
-
-  while (unvisited.size > 0){
+  while (unvisited.size > 0) {
+    let nearest = -1;
     let nearestDist = Infinity;
-    let nearestIdx = -1;
-
-    for (const idx of unvisited){
-      const dist = haversine(locations[currentIdx].coord, locations[idx].coord);
-      if (dist < nearestDist){
+    for (let idx of unvisited) {
+      const dist = haversine(locations[current].coord, locations[idx].coord);
+      if (dist < nearestDist) {
+        nearest = idx;
         nearestDist = dist;
-        nearestIdx = idx;
       }
-
     }
-    currentIdx = nearestIdx;
-    path.push(currentIdx);
-    unvisited.delete(currentIdx);
+    path.push(nearest);
+    unvisited.delete(nearest);
+    current = nearest;
   }
   return path;
 }
 
-function apply2Opt(initialPath, locations){
+function apply2Opt(initialPath, locations) {
   let bestPath = [...initialPath];
   let improved = true;
 
-  while (improved){
+  while (improved) {
     improved = false;
-    for (let i = 1; i < bestPath.length - 2; i++){
-      for (let j = i + 1; i < bestPath.length - 1; j++){
-        const currentEdgeDist = haversine(locations[bestPath[i - 1]]. coord, locations[bestPath[i]].coord) +
-                                haversine(locations[bestPath [j]].coord, locations[bestPath[j + 1].coord]);
-
-        const newEdgeDist = haversine(locations[bestPath[i - 1]].coord, locations[bestPath[j]].coord) +
-                            haversine(locations[bestPath[i]].coord, locations[bestPath[j + 1]]. coord);
-        
-        if (newEdgeDist < currentEdgeDist){
+    for (let i = 1; i < bestPath.length - 2; i++) {
+      for (let j = i + 1; j < bestPath.length - 1; j++) {
+        const currentDist = haversine(locations[bestPath[i - 1]].coord, locations[bestPath[i]].coord) +
+          haversine(locations[bestPath[j]].coord, locations[bestPath[j + 1]].coord);
+        const newDist = haversine(locations[bestPath[i - 1]].coord, locations[bestPath[j]].coord) +
+          haversine(locations[bestPath[i]].coord, locations[bestPath[j + 1]].coord);
+        if (newDist < currentDist) {
           const newPath = [...bestPath.slice(0, i), ...bestPath.slice(i, j + 1).reverse(), ...bestPath.slice(j + 1)];
           bestPath = newPath;
           improved = true;
@@ -102,98 +66,94 @@ function apply2Opt(initialPath, locations){
 }
 
 function generateMapsUrl(path, locations) {
-    const baseUrl = "https://www.google.com/maps/dir/";
-    const waypoints = path.map(index => {
-        const { lat, lng } = locations[index].coord;
-        return `${lat},${lng}`;
-    }).join('/');
-    return baseUrl + waypoints;
+  return "https://www.google.com/maps/dir/" + path.map(i => `${locations[i].coord.lat},${locations[i].coord.lng}`).join("/");
 }
 
-// UI HELPER COMPONENTS
+// DOM Elements
+const locationsInput = document.getElementById("locations");
+const optimizeBtn = document.getElementById("optimizeBtn");
+const loadingMsg = document.getElementById("loadingMessage");
+const errorBox = document.getElementById("errorBox");
+const errorText = document.getElementById("errorText");
+const resultBox = document.getElementById("resultBox");
+const originalDist = document.getElementById("originalDist");
+const optimizedDist = document.getElementById("optimizedDist");
+const savedDist = document.getElementById("savedDist");
+const savedPercent = document.getElementById("savedPercent");
+const routeUrl = document.getElementById("routeUrl");
+const copyBtn = document.getElementById("copyBtn");
+const yearSpan = document.getElementById("year");
 
-const StatCard = ({ label, value, subtext, colorClass }) => (
-    <div className={`flex-1 p-4 bg-gray-50 rounded-lg text-center ${colorClass}`}>
-        <p className="text-sm text-gray-500">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
-        {subtext && <p className="text-xs text-gray-400">{subtext}</p>}
-    </div>
-);
+// Footer Year
+yearSpan.textContent = new Date().getFullYear();
 
-
-export default function App(){
-
-  const [locationsInput, setLocationsInput]  = useState("Amber Palace, Jaipur\nAlbert Hall Museum, Jaipur\nHawa Mahal\nCentral Park, Jaipur\nJal Mahal");
-  const [optimizedUrl, setoptimizedUrl]      = useState("");
-  const [stats, setStats]                    = useState(null);
-  const [isloading, setIsLoading]            = useState(false);
-  const [error, setError]                    = useState(null);
-  const [iscopied, setIsCopied]              = useState(false);
-  const [loadingmeassage, setLoadingMessage] = useState("");
-
-  const handleOptimize = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    setoptimizedUrl("");
-    setStats(null);
-    setLoadingMessage("");
-
-    //if no. of places is less than 2 then throw an error 
-    const places = locationsInput.split('\n').map(p => p.trim()).filter(p => p.length > 0);
-    if (places.length < 2){
-      setError("please enter at least 2 locations");
-      setIsLoading(false);
-      return;
-    }
-    try {
-
-      // using a sequential loop for openstreetmap
-      for (let i = 0; i < places.length; i++){
-        const place = places[i];
-        setLoadingMessage(`Geocoding ${i + 1}/${places.length}: ${place}...`);
-
-        // 1 second delay between each request
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // API fetch 
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=1`);
-        if (!response.ok){
-          throw new Error(`Network response was not ok for ${place}`);
-        }
-        const data = await response.json();
-      }
-      const resolvedLocations = [];
-      const failedPlaces = [];
-
-      if (data && data.length > 0){
-        resolvedLocations.push({
-          name: place,
-          coord:{
-            lat: parseFloat(data[0].lat),
-            lng: parseFloat(data[0].lon) // Nominatim uses 'lon'
-          }
-
-        });
-      } else {
-        failedPlaces.push(place);
-      }
-    }
-
-    if (failedPlaces.length > 0){
-      throw new Error(`Could not find coordinates for ${failedPlaces.join(',')}. Please check the spelling to be more specific`);
-    }
-
-    if (resolvedLocations < 2){
-      setError("At least 2 places are needed for optimization");
-      setIsLoading(false);
-      return;
-    }
-
-    setLoadingMessage("Optimizing route.....");
-
-    
-
+// Optimize Route
+optimizeBtn.addEventListener("click", async () => {
+  const places = locationsInput.value.split("\n").map(p => p.trim()).filter(p => p);
+  if (places.length < 2) {
+    showError("Please enter at least 2 locations");
+    return;
   }
 
+  clearUI();
+  loadingMsg.textContent = "Geocoding locations...";
 
+  try {
+    const resolved = [];
+    for (let i = 0; i < places.length; i++) {
+      loadingMsg.textContent = `Geocoding ${i + 1}/${places.length}: ${places[i]}`;
+      await new Promise(res => setTimeout(res, 800));
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(places[i])}&format=json&limit=1`);
+      const data = await res.json();
+      if (!data || !data.length) throw new Error(`Couldn't find: ${places[i]}`);
+      resolved.push({ name: places[i], coord: { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } });
+    }
+
+    const originalPath = Array.from({ length: resolved.length }, (_, i) => i);
+    const tspPath = nearestNeighbor(resolved);
+    const optimizedPath = apply2Opt(tspPath, resolved);
+
+    const origDist = calculateTotalDistance(originalPath, resolved);
+    const optDist = calculateTotalDistance(optimizedPath, resolved);
+    const saved = origDist - optDist;
+    const percent = origDist > 0 ? ((saved / origDist) * 100).toFixed(1) : "0.0";
+    const url = generateMapsUrl(optimizedPath, resolved);
+
+    originalDist.textContent = `${origDist.toFixed(0)} km`;
+    optimizedDist.textContent = `${optDist.toFixed(0)} km`;
+    savedDist.textContent = `${saved.toFixed(0)} km`;
+    savedPercent.textContent = `${percent}% shorter`;
+    routeUrl.href = url;
+    routeUrl.textContent = url;
+    resultBox.classList.remove("hidden");
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    loadingMsg.textContent = "";
+  }
+});
+
+function showError(msg) {
+  errorText.textContent = msg;
+  errorBox.classList.remove("hidden");
 }
+
+function clearUI() {
+  errorBox.classList.add("hidden");
+  resultBox.classList.add("hidden");
+  errorText.textContent = "";
+  routeUrl.textContent = "";
+}
+
+// Copy URL
+copyBtn.addEventListener("click", () => {
+  const url = routeUrl.href;
+  if (!url) return;
+  navigator.clipboard.writeText(url);
+  const icon = document.getElementById("copyIcon");
+  const original = icon.innerHTML;
+  icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />';
+  setTimeout(() => {
+    icon.innerHTML = original;
+  }, 2000);
+});
