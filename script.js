@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 
-// --- HELPER ICONS (defined outside component to prevent re-creation) ---
+// HELPER ICONS
 
 const MapPinIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 inline-block" viewBox="0 0 20 20" fill="currentColor">
@@ -24,9 +24,10 @@ const CheckIcon = () => (
     </svg>
 );
 
+// MAIN 
 
 function haversine(a, b){
-  R = 6371;
+  const R = 6371;
   const toRad = deg => deg * Math.PI/180;
   const dlat = toRad(b.lat - a.lat);
   const dlng = toRad(b.lng - a.lng);
@@ -38,7 +39,7 @@ function haversine(a, b){
 }
 
 function calculateTotalDistance(path, locations){
-  totalDistance = 0;
+  let totalDistance = 0;
   for (let i =0; i < length.path - 1; i++){
     const from = locations[path[i]];
     const to = locations[path[i + 1]];
@@ -64,13 +65,13 @@ function nearestNeighbor(locations){
       const dist = haversine(locations[currentIdx].coord, locations[idx].coord);
       if (dist < nearestDist){
         nearestDist = dist;
-        nearestDist = idx;
+        nearestIdx = idx;
       }
 
     }
     currentIdx = nearestIdx;
-    path.push[currentIdx];
-    unvisited.delete[currentIdx];
+    path.push(currentIdx);
+    unvisited.delete(currentIdx);
   }
   return path;
 }
@@ -82,11 +83,12 @@ function apply2Opt(initialPath, locations){
   while (improved){
     improved = false;
     for (let i = 1; i < bestPath.length - 2; i++){
-      for (let j = i + 1; i < bestPath.length - 1; i++){
-        const currentEdgeDist = haversine(locations[bestPath - 1]. coord, locations[bestPath[i]].coord) +
-                                haversine(locations[bestPath [j - 1]].coord, locations[bestPath[i].coord]);
-        const newEdgeDist = haversine(locations[i - 1].coord, locations[bestPath[j].coord]) +
-                            haversine(locations[bestPath[i]].coord, locations[bestPath[i + j]]. coord);
+      for (let j = i + 1; i < bestPath.length - 1; j++){
+        const currentEdgeDist = haversine(locations[bestPath[i - 1]]. coord, locations[bestPath[i]].coord) +
+                                haversine(locations[bestPath [j]].coord, locations[bestPath[j + 1].coord]);
+
+        const newEdgeDist = haversine(locations[bestPath[i - 1]].coord, locations[bestPath[j]].coord) +
+                            haversine(locations[bestPath[i]].coord, locations[bestPath[j + 1]]. coord);
         
         if (newEdgeDist < currentEdgeDist){
           const newPath = [...bestPath.slice(0, i), ...bestPath.slice(i, j + 1).reverse(), ...bestPath.slice(j + 1)];
@@ -108,7 +110,7 @@ function generateMapsUrl(path, locations) {
     return baseUrl + waypoints;
 }
 
-// --- UI HELPER COMPONENTS ---
+// UI HELPER COMPONENTS
 
 const StatCard = ({ label, value, subtext, colorClass }) => (
     <div className={`flex-1 p-4 bg-gray-50 rounded-lg text-center ${colorClass}`}>
@@ -135,6 +137,61 @@ export default function App(){
     setoptimizedUrl("");
     setStats(null);
     setLoadingMessage("");
+
+    //if no. of places is less than 2 then throw an error 
+    const places = locationsInput.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+    if (places.length < 2){
+      setError("please enter at least 2 locations");
+      setIsLoading(false);
+      return;
+    }
+    try {
+
+      // using a sequential loop for openstreetmap
+      for (let i = 0; i < places.length; i++){
+        const place = places[i];
+        setLoadingMessage(`Geocoding ${i + 1}/${places.length}: ${place}...`);
+
+        // 1 second delay between each request
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // API fetch 
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=1`);
+        if (!response.ok){
+          throw new Error(`Network response was not ok for ${place}`);
+        }
+        const data = await response.json();
+      }
+      const resolvedLocations = [];
+      const failedPlaces = [];
+
+      if (data && data.length > 0){
+        resolvedLocations.push({
+          name: place,
+          coord:{
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon) // Nominatim uses 'lon'
+          }
+
+        });
+      } else {
+        failedPlaces.push(place);
+      }
+    }
+
+    if (failedPlaces.length > 0){
+      throw new Error(`Could not find coordinates for ${failedPlaces.join(',')}. Please check the spelling to be more specific`);
+    }
+
+    if (resolvedLocations < 2){
+      setError("At least 2 places are needed for optimization");
+      setIsLoading(false);
+      return;
+    }
+
+    setLoadingMessage("Optimizing route.....");
+
+    
 
   }
 
